@@ -5,9 +5,9 @@ import threading
 import pandas as pd
 from random import randint
 from PyQt5 import QtGui
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout,QLabel, QPushButton, QProgressBar, QMessageBox
+from PyQt5.QtWidgets import QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout,QLabel, QPushButton, QProgressBar, QMessageBox, QListView
 
 # create directories
 CWD = os.getcwd()
@@ -74,6 +74,20 @@ class ProgressBar(QProgressBar):
             return
         self.setValue(self.value() + 1)
 
+class AnalysisThread(QThread):
+    finished_signal = pyqtSignal(str)
+
+    def __init__(self, input_data):
+        super().__init__()
+        self.input_data = input_data
+
+    def run(self):
+        import script
+        import os
+        script.get_race_data(self.input_data)
+        plot_path = os.getcwd() + (f'/formula/plot/{self.input_data[5]}.png')
+        self.finished_signal.emit(plot_path)
+
 # main gui window 
 class MainWindow(QWidget):
     def __init__(self):
@@ -83,8 +97,8 @@ class MainWindow(QWidget):
 
     # initialize main window
     def initUI(self):
-        self.setFixedSize(880, 525)
-        self.move(200, 100)
+        self.setFixedSize(1100, 650)
+        self.move(100, 50)
         self.setWindowTitle('Formula 1 Telemetry Analytics')
         self.setWindowIcon(QtGui.QIcon(CWD + '/formula/img/f1.png'))
 
@@ -101,6 +115,9 @@ class MainWindow(QWidget):
         self.drop_driver2 = QComboBox()
         self.drop_analysis = QComboBox()
         self.lap_number = QComboBox()
+
+        for box in [self.drop_year, self.drop_grand_prix, self.drop_session, self.drop_driver1, self.drop_driver2, self.drop_analysis, self.lap_number]:
+            box.setView(QListView())
 
         # not working properly
         self.warning_box = QMessageBox(self)
@@ -157,7 +174,7 @@ class MainWindow(QWidget):
         self.drop_grand_prix.currentTextChanged.connect(self.update_laps) # updates lap number based on grand prix selection
 
         self.img_plot = QLabel()
-        self.img_plot.setPixmap(QPixmap(placeholder_path).scaledToWidth(625)) # could increase scale to improve readability of high dpi images
+        self.img_plot.setPixmap(QPixmap(placeholder_path).scaledToWidth(800)) # improved scale to stop squishing
         img_layout.addWidget(self.img_plot)
 
         self.setLayout(img_layout)
@@ -183,7 +200,7 @@ class MainWindow(QWidget):
 
     # displays requested analysis plot, returned from script.py
     def display_plot(self, plot_path):
-        self.img_plot.setPixmap(QPixmap(plot_path).scaledToWidth(625))
+        self.img_plot.setPixmap(QPixmap(plot_path).scaledToWidth(800))
 
     # saves currently displayed plot to user's desktop as .png
     def save_plot(self):
@@ -210,11 +227,6 @@ class MainWindow(QWidget):
 
     # starts new thread for script.py operation so gui.py does not freeze
     def thread_script(self):
-        thread_script = threading.Thread(target = self.button_listen)
-        thread_script.start()
-
-    # activates on analysis button press, gets input_data, runs script.py, adjusts gui. checks if year value is valid
-    def button_listen(self):
         input_data = self.current_text()
         if input_data[0] == 'Select Year':
             self.run_button.setText('Run Analysis (Select Valid Year)')
@@ -222,12 +234,18 @@ class MainWindow(QWidget):
             self.run_button.setText('Running . . .')
             self.save_button.hide()
             self.pbar.show()
-            script.get_race_data(input_data)
-            self.plot_path = os.getcwd() + (f'/formula/plot/{input_data[5]}.png')
-            self.display_plot(self.plot_path)
-            self.pbar.hide()
-            self.run_button.setText('Run New Analysis')
-            self.save_button.show()
+            
+            self.calc_thread = AnalysisThread(input_data)
+            self.calc_thread.finished_signal.connect(self.on_analysis_finished)
+            self.calc_thread.start()
+
+    # updates gui when background thread is done
+    def on_analysis_finished(self, plot_path):
+        self.plot_path = plot_path
+        self.display_plot(self.plot_path)
+        self.pbar.hide()
+        self.run_button.setText('Run New Analysis')
+        self.save_button.show()
     
     # updates all selection lists based on the year selected. drivers/race locations change each year
     def update_lists(self):
@@ -241,7 +259,16 @@ class MainWindow(QWidget):
             self.drop_driver2.addItems(drivers[str(sel_year)].dropna().to_list())
 
 if __name__ == '__main__':
+    import os
+    from PyQt5 import QtCore
+    if sys.platform == "win32":
+        try:
+            QApplication.setAttribute(QtCore.Qt.AA_SynthesizeMouseForUnhandledTouchEvents, False)
+            QApplication.setAttribute(QtCore.Qt.AA_SynthesizeTouchForUnhandledMouseEvents, False)
+        except AttributeError:
+            pass
     app = QApplication(sys.argv)
+    app.setStyle('Fusion')
     app.setStyleSheet(StyleSheet)
     mw = MainWindow()
     mw.show()

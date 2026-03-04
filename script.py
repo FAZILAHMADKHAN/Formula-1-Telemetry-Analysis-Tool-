@@ -1,6 +1,11 @@
+driver_abbr = {'Lewis Hamilton': 'HAM', 'Sebastian Vettel': 'VET', 'Kimi Räikkönen': 'RAI', 'Max Verstappen': 'VER', 'Valtteri Bottas': 'BOT', 'Daniel Ricciardo': 'RIC', 'Charles Leclerc': 'LEC', 'Carlos Sainz': 'SAI', 'Sergio Perez': 'PER', 'Lando Norris': 'NOR', 'Fernando Alonso': 'ALO', 'George Russell': 'RUS', 'Oscar Piastri': 'PIA'}
+
+import warnings
+warnings.filterwarnings('ignore')
 # imports
 import os
 import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 import pandas as pd
 import fastf1 as ff1
@@ -43,8 +48,8 @@ def get_sectors(average_speed, input_data):
         'Speed': []
     })
 
-    d1 = sectors_combined.loc[sectors_combined['Driver'] == input_data[3].split()[0]]
-    d2 = sectors_combined.loc[sectors_combined['Driver'] == input_data[4].split()[0]]
+    d1 = sectors_combined.loc[sectors_combined['Driver'] == driver_abbr.get(input_data[3], input_data[3][:3].upper())]
+    d2 = sectors_combined.loc[sectors_combined['Driver'] == driver_abbr.get(input_data[4], input_data[4][:3].upper())]
 
     for i in range(0, len(d1)): #issue, sometimes length of d1 is not 25
         d1_sector = d1.iloc[[i]].values.tolist()
@@ -62,14 +67,14 @@ def get_sectors(average_speed, input_data):
 # returns a saved version of the generated plot
 def plot_laptime(race, input_data):
     plt.clf()
-    d1 = input_data[3].split()[0]
-    d2 = input_data[4].split()[0]
+    d1 = driver_abbr.get(input_data[3], input_data[3][:3].upper())
+    d2 = driver_abbr.get(input_data[4], input_data[4][:3].upper())
 
-    laps_d1 = race.laps.pick_driver(d1)
-    laps_d2 = race.laps.pick_driver(d2)
+    laps_d1 = race.laps.pick_drivers(d1)
+    laps_d2 = race.laps.pick_drivers(d2)
 
-    color1 = ff1.plotting.driver_color(input_data[3])
-    color2 = ff1.plotting.driver_color(input_data[4])
+    color1 = ff1.plotting.get_driver_color(driver_abbr.get(input_data[3], input_data[3][:3].upper()), race)
+    color2 = ff1.plotting.get_driver_color(driver_abbr.get(input_data[4], input_data[4][:3].upper()), race)
 
     fig, ax = plt.subplots()
     ax.plot(laps_d1['LapNumber'], laps_d1['LapTime'], color = color1, label = input_data[3])
@@ -86,17 +91,17 @@ def plot_laptime(race, input_data):
 # returns a saved version of the generated plot
 def plot_fastest_lap(race, input_data):
     plt.clf()
-    d1 = input_data[3].split()[0]
-    d2 = input_data[4].split()[0]
+    d1 = driver_abbr.get(input_data[3], input_data[3][:3].upper())
+    d2 = driver_abbr.get(input_data[4], input_data[4][:3].upper())
 
-    fastest_d1 = race.laps.pick_driver(d1).pick_fastest()
-    fastest_d2 = race.laps.pick_driver(d2).pick_fastest()
+    fastest_d1 = race.laps.pick_drivers(d1).pick_fastest()
+    fastest_d2 = race.laps.pick_drivers(d2).pick_fastest()
 
     tel_d1 = fastest_d1.get_car_data().add_distance()
     tel_d2 = fastest_d2.get_car_data().add_distance()
 
-    color1 = ff1.plotting.driver_color(input_data[3])
-    color2 = ff1.plotting.driver_color(input_data[4])
+    color1 = ff1.plotting.get_driver_color(driver_abbr.get(input_data[3], input_data[3][:3].upper()), race)
+    color2 = ff1.plotting.get_driver_color(driver_abbr.get(input_data[4], input_data[4][:3].upper()), race)
 
     fig, ax = plt.subplots()
     ax.plot(tel_d1['Distance'], tel_d1['Speed'], color = color1, label = input_data[3])
@@ -115,12 +120,12 @@ def plot_fastest_lap(race, input_data):
 def plot_fastest_sectors(race, input_data):
     plt.clf()
     laps = race.laps
-    drivers = [input_data[3].split()[0], input_data[4].split()[0]]
-    telemetry = pd.DataFrame()
+    drivers = [driver_abbr.get(input_data[3], input_data[3][:3].upper()), driver_abbr.get(input_data[4], input_data[4][:3].upper())]
+    telemetry_list = []
     
     # list of each driver
     for driver in drivers:
-        driver_laps = laps.pick_driver(driver)
+        driver_laps = laps.pick_drivers(driver)
 
         # gets telemetry data for each driver on each lap
         for lap in driver_laps.iterlaps():
@@ -128,7 +133,9 @@ def plot_fastest_sectors(race, input_data):
             driver_telemtry['Driver'] = driver
             driver_telemtry['Lap'] = lap[1]['LapNumber']
 
-            telemetry = telemetry.append(driver_telemtry)
+            telemetry_list.append(driver_telemtry)
+
+    telemetry = pd.concat(telemetry_list, ignore_index=True)
 
     # keeping important columns
     telemetry = telemetry[['Lap', 'Distance', 'Driver', 'Speed', 'X', 'Y']]
@@ -147,8 +154,8 @@ def plot_fastest_sectors(race, input_data):
     telemetry = telemetry.merge(best_sectors, on = ['Minisector'])
     telemetry = telemetry.sort_values(by = ['Distance'])
 
-    telemetry.loc[telemetry['fastest_driver'] == input_data[3].split()[0], 'fastest_driver_int'] = 1
-    telemetry.loc[telemetry['fastest_driver'] == input_data[4].split()[0], 'fastest_driver_int'] = 2
+    telemetry.loc[telemetry['fastest_driver'] == driver_abbr.get(input_data[3], input_data[3][:3].upper()), 'fastest_driver_int'] = 1
+    telemetry.loc[telemetry['fastest_driver'] == driver_abbr.get(input_data[4], input_data[4][:3].upper()), 'fastest_driver_int'] = 2
     
     # gets x,y data for a single lap. useful for drawing circuit.
     # x,y values can be inconsistent, causing strange behavior.
@@ -164,8 +171,8 @@ def plot_fastest_sectors(race, input_data):
     which_driver = single_lap['fastest_driver_int'].to_numpy().astype(float)
 
     # getting colormap for two drivers
-    color1 = ff1.plotting.driver_color(input_data[3])
-    color2 = ff1.plotting.driver_color(input_data[4])
+    color1 = ff1.plotting.get_driver_color(driver_abbr.get(input_data[3], input_data[3][:3].upper()), race)
+    color2 = ff1.plotting.get_driver_color(driver_abbr.get(input_data[4], input_data[4][:3].upper()), race)
     color1 = matplotlib.colors.to_rgb(color1)
     color2 = matplotlib.colors.to_rgb(color2)
     colors = [color1, color2]
@@ -193,11 +200,11 @@ def plot_fastest_sectors(race, input_data):
 # returns a saved version of the generated plot
 def plot_full_telemetry(race, input_data): # speed, throttle, brake, rpm, gear, drs 
     plt.clf()
-    d1 = input_data[3].split()[0]
-    d2 = input_data[4].split()[0]
+    d1 = driver_abbr.get(input_data[3], input_data[3][:3].upper())
+    d2 = driver_abbr.get(input_data[4], input_data[4][:3].upper())
 
-    fastest_d1 = race.laps.pick_driver(d1).pick_fastest()
-    fastest_d2 = race.laps.pick_driver(d2).pick_fastest()
+    fastest_d1 = race.laps.pick_drivers(d1).pick_fastest()
+    fastest_d2 = race.laps.pick_drivers(d2).pick_fastest()
 
     tel_d1 = fastest_d1.get_car_data().add_distance()
     tel_d1['Brake'] = tel_d1['Brake'].astype(int)
@@ -207,7 +214,7 @@ def plot_full_telemetry(race, input_data): # speed, throttle, brake, rpm, gear, 
     delta_time, ref_tel, compare_tel = utils.delta_time(fastest_d1, fastest_d2)
 
     telem_data_combined = [tel_d1, tel_d2]
-    colors = [ff1.plotting.driver_color(input_data[3]), ff1.plotting.driver_color(input_data[4])]
+    colors = [ff1.plotting.get_driver_color(driver_abbr.get(input_data[3], input_data[3][:3].upper()), race), ff1.plotting.get_driver_color(driver_abbr.get(input_data[4], input_data[4][:3].upper()), race)]
 
     fig, ax = plt.subplots(6)
     for telem, color in zip(telem_data_combined, colors):
